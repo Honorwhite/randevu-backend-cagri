@@ -8,38 +8,23 @@ const app = express();
 app.set('trust proxy', 1); // Güvenlik duvarı veya proxy arkasında çalışıyorsa gerekli (Heroku, Vercel, Nginx vb.)
 const PORT = process.env.PORT || 3000;
 
-const cors = require('cors');
-
 // reCAPTCHA secret key
 const RECAPTCHA_SECRET_KEY = '6Lejz2csAAAAAPJXiC-hg-IVW2AxiYyIRFZedqa1';
-
 const CORS_ORIGIN = (process.env.CORS_ORIGIN || '').trim();
 
-const allowedOrigins = [
-  'https://drcagriyapar.com',
-  'https://www.drcagriyapar.com',
-  'http://localhost:3000',
-  'http://localhost:5173'
-];
+// Foolproof Manual CORS Middleware
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Authorization, Accept, Origin');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-// CORS configuration
-app.use(cors({
-  origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-
-    const isAllowed = allowedOrigins.indexOf(origin) !== -1 || CORS_ORIGIN === '*';
-
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['X-Requested-With', 'Content-Type', 'Authorization', 'Accept']
-}));
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
 
 // Middleware
 app.use(express.json());
