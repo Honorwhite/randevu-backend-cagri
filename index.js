@@ -11,6 +11,8 @@ const PORT = process.env.PORT || 3000;
 // reCAPTCHA secret key
 const RECAPTCHA_SECRET_KEY = '6Lejz2csAAAAAPJXiC-hg-IVW2AxiYyIRFZedqa1';
 // public 6LfcyRsrAAAAAI_sUBUx-2EzTd6mDzB81ce6ZiI3
+const CORS_ORIGIN = (process.env.CORS_ORIGIN || '').trim();
+
 // Custom CORS Middleware to ensure headers are ALWAYS set
 app.use((req, res, next) => {
   const allowedOrigins = [
@@ -22,8 +24,10 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   console.log(`${req.method} isteği geldi: ${req.url} (Origin: ${origin})`);
 
-  if (allowedOrigins.includes(origin) || process.env.CORS_ORIGIN === '*') {
+  if (allowedOrigins.includes(origin) || CORS_ORIGIN === '*') {
     res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  } else if (!origin && CORS_ORIGIN === '*') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
