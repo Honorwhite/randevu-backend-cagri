@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 const axios = require('axios');
@@ -12,36 +11,35 @@ const PORT = process.env.PORT || 3000;
 // reCAPTCHA secret key
 const RECAPTCHA_SECRET_KEY = '6Lejz2csAAAAAPJXiC-hg-IVW2AxiYyIRFZedqa1';
 // public 6LfcyRsrAAAAAI_sUBUx-2EzTd6mDzB81ce6ZiI3
+// Custom CORS Middleware to ensure headers are ALWAYS set
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'https://drcagriyapar.com',
+    'https://www.drcagriyapar.com',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ];
+  const origin = req.headers.origin;
+  console.log(`${req.method} isteği geldi: ${req.url} (Origin: ${origin})`);
+
+  if (allowedOrigins.includes(origin) || process.env.CORS_ORIGIN === '*') {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Authorization, Accept');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Handle preflight (OPTIONS)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
 // Middleware
 app.use(express.json());
-
-// CORS configuration
-const allowedOrigins = [
-  'https://drcagriyapar.com',
-  'https://www.drcagriyapar.com',
-  'http://localhost:3000',
-  'http://localhost:5173'
-];
-
-const corsOptions = {
-  origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.CORS_ORIGIN === '*') {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  credentials: true,
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
 // IP başına günde 3 istek ile sınırlama yapan rate limiter
 const apiLimiter = rateLimit({
@@ -346,7 +344,25 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// Uygulamayı dinlemeye başla
+// Root check
+app.get('/', (req, res) => {
+  res.status(200).json({ message: 'Dr. Çağrı Yapar Randevu API çalışıyor.' });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Beklenmedik hata:', err);
+  // Ensure CORS headers on errors too
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.status(500).json({
+    success: false,
+    message: 'Sunucu tarafında bir hata oluştu.'
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`Sunucu ${PORT} portunda çalışıyor.`);
-}); 
+});
