@@ -8,23 +8,16 @@ const app = express();
 app.set('trust proxy', 1); // Güvenlik duvarı veya proxy arkasında çalışıyorsa gerekli (Heroku, Vercel, Nginx vb.)
 const PORT = process.env.PORT || 3000;
 
+const cors = require('cors');
+
 // reCAPTCHA secret key
 const RECAPTCHA_SECRET_KEY = '6Lejz2csAAAAAPJXiC-hg-IVW2AxiYyIRFZedqa1';
-const CORS_ORIGIN = (process.env.CORS_ORIGIN || '').trim();
 
-// Foolproof Manual CORS Middleware
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-  res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Authorization, Accept, Origin');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  next();
-});
+// Simplified CORS for Express
+app.use(cors({
+  origin: true, // Echoes the request origin, which is safe for credentials
+  credentials: true
+}));
 
 // Middleware
 app.use(express.json());
