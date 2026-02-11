@@ -14,12 +14,39 @@ const RECAPTCHA_SECRET_KEY = '6Lejz2csAAAAAPJXiC-hg-IVW2AxiYyIRFZedqa1';
 // public 6LfcyRsrAAAAAI_sUBUx-2EzTd6mDzB81ce6ZiI3
 // Middleware
 app.use(express.json());
-app.use(cors());
+
+// CORS configuration
+const allowedOrigins = [
+  'https://drcagriyapar.com',
+  'https://www.drcagriyapar.com',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.CORS_ORIGIN === '*') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // IP başına günde 3 istek ile sınırlama yapan rate limiter
 const apiLimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 saat (1 gün)
-  max: 3, // IP başına maksimum 3 istek
+  max: 10, // IP başına maksimum 10 istek (hata yapma ihtimaline karşı artırıldı)
   message: {
     success: false,
     message: 'Çok fazla istek yaptınız. Lütfen 24 saat sonra tekrar deneyin.'
