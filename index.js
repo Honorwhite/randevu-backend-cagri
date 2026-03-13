@@ -11,7 +11,8 @@ const PORT = process.env.PORT || 3000;
 const cors = require('cors');
 
 // reCAPTCHA secret key
-const RECAPTCHA_SECRET_KEY = '6Lejz2csAAAAAPJXiC-hg-IVW2AxiYyIRFZedqa1';
+// reCAPTCHA secret key - Priorities: 1. Environment Variable, 2. Hardcoded fallback
+const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || '6Lejz2csAAAAAPJXiC-hg-IVW2AxiYyIRFZedqa1';
 
 // Simplified CORS for Express
 app.use(cors({
@@ -35,40 +36,49 @@ const apiLimiter = rateLimit({
 });
 
 // reCAPTCHA v3 doğrulama fonksiyonu
-async function verifyRecaptchaV3(captchaToken) {
+async function verifyRecaptchaV3(captchaToken, remoteIp) {
   try {
+    // Google API typically expects form-data
+    const params = new URLSearchParams();
+    params.append('secret', RECAPTCHA_SECRET_KEY);
+    params.append('response', captchaToken);
+    if (remoteIp) params.append('remoteip', remoteIp);
+
     const response = await axios.post(
       'https://www.google.com/recaptcha/api/siteverify',
-      null,
+      params.toString(),
       {
-        params: {
-          secret: RECAPTCHA_SECRET_KEY,
-          response: captchaToken
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
         }
       }
     );
 
     const data = response.data;
 
-    // v3 puanı kontrol et (0.0 - 1.0 arası)
-    if (data.success && data.score !== undefined) {
-      // 0.5'in üzerindeki skorlar genellikle insan olarak kabul edilir
-      // Ancak güvenliği artırmak için eşiği yükseltebilirsiniz
-      console.log(`reCAPTCHA Skoru: ${data.score}, Eylem: ${data.action}`);
+    if (data.success) {
+      // v3 puanı kontrol et (0.0 - 1.0 arası)
+      // 0.7 ve üzeri genellikle daha güvenlidir
+      const score = data.score !== undefined ? data.score : 1.0;
+
+      console.log(`reCAPTCHA Doğrulama Başarılı - Skor: ${score}, Eylem: ${data.action}, Host: ${data.hostname}`);
+
       return {
-        success: data.score >= 0.5,
-        score: data.score,
-        action: data.action
+        success: score >= 0.7, // Eşiği 0.7'ye yükselttik
+        score: score,
+        action: data.action,
+        hostname: data.hostname
       };
     }
 
+    console.error('reCAPTCHA Google Hatası:', data['error-codes']);
     return {
       success: false,
       score: 0,
       action: null
     };
   } catch (error) {
-    console.error('reCAPTCHA doğrulama hatası:', error);
+    console.error('reCAPTCHA doğrulama hatası:', error.message);
     return {
       success: false,
       score: 0,
@@ -272,8 +282,8 @@ ${formData.mesaj ? `Mesaj: ${formData.mesaj}` : ''}
 // Randevu talebi alma endpoint'i - rate limiter ve reCAPTCHA v3 uygulandı
 app.post('/api/randevu', apiLimiter, async (req, res) => {
   try {
-    // reCAPTCHA v3 doğrulama
     const captchaToken = req.body.captcha;
+    const remoteIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     if (!captchaToken) {
       return res.status(400).json({
@@ -282,18 +292,23 @@ app.post('/api/randevu', apiLimiter, async (req, res) => {
       });
     }
 
-    const recaptchaResult = await verifyRecaptchaV3(captchaToken);
+    const recaptchaResult = await verifyRecaptchaV3(captchaToken, remoteIp);
 
     if (!recaptchaResult.success) {
-      return res.status(400).json({
+      return res.status(403).json({
         success: false,
-        message: 'Güvenlik doğrulaması başarısız oldu. Lütfen tekrar deneyin.'
+        message: 'Güvenlik doğrulaması başarısız oldu (Bot algılandı). Lütfen tekrar deneyin.'
       });
     }
 
-    // reCAPTCHA eylem kontrolü
-    if (recaptchaResult.action && !['randevu_form', 'contact_form'].includes(recaptchaResult.action)) {
-      console.warn(`Beklenen eylem 'contact_form', alınan: ${recaptchaResult.action}`);
+    // reCAPTCHA eylem kontrolü - Gelen eylem beklenenlerden biri olmalı
+    const allowedActions = ['randevu_form', 'contact_form'];
+    if (recaptchaResult.action && !allowedActions.includes(recaptchaResult.action)) {
+      console.warn(`Geçersiz eylem algılandı: ${recaptchaResult.action}`);
+      return res.status(403).json({
+        success: false,
+        message: 'Geçersiz güvenlik eylemi.'
+      });
     }
 
     const formData = {
